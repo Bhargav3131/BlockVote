@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>College Admin — BlockVote</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="{{ url_for('college_admin_dashboard') }}" class="navbar-brand">⛓️ BLOCKVOTE</a>
+    <div class="navbar-links">
+      <span class="nav-link text-dim" style="font-size:0.78rem;">College Admin</span>
+      <span id="nav-status" class="badge {% if state.is_active %}badge-active{% else %}badge-inactive{% endif %}">
+        {% if state.is_active %}<span class="live-dot"></span>LIVE{% else %}◌ INACTIVE{% endif %}
+      </span>
+      <a href="{{ url_for('college_admin_logout') }}" class="nav-link danger">Logout</a>
+    </div>
+  </nav>
+
+  <div class="container-sm" style="padding-top:36px;">
+    <div class="page-header">
+      <h1>VOTER VERIFICATION</h1>
+      <p id="election-label">{{ state.election_name }}</p>
+    </div>
+
+    <div class="stats-row" style="grid-template-columns:1fr 1fr;margin-bottom:18px;">
+      <div class="stat-card"><div class="stat-val" id="live-voted" style="font-size:1.5rem;">—</div><div class="stat-label">Voted</div></div>
+      <div class="stat-card"><div class="stat-val" id="live-total" style="font-size:1.5rem;">—</div><div class="stat-label">Registered</div></div>
+    </div>
+
+    <!-- Inactive -->
+    <div id="inactive-panel" style="{% if state.is_active %}display:none{% endif %}">
+      <div class="card" style="text-align:center;padding:36px;">
+        <div style="font-size:2rem;margin-bottom:12px;">⏸</div>
+        <div style="font-family:var(--font-head);letter-spacing:2px;color:var(--red);">ELECTION NOT ACTIVE</div>
+        <p class="text-dim mt-1" style="font-size:0.84rem;">Waiting for Main Admin to start the election.</p>
+      </div>
+    </div>
+
+    <!-- Active -->
+    <div id="active-panel" style="{% if not state.is_active %}display:none{% endif %}">
+
+      <!-- PRN card -->
+      <div class="card" id="prn-card">
+        <div class="card-title">Verify Student PRN</div>
+        <div id="msg-box" style="display:none;" class="flash-msg"></div>
+        <div class="form-group">
+          <label class="form-label">Student PRN / Roll Number</label>
+          <input type="text" id="prn-input" class="form-control"
+            placeholder="e.g. 04423000726" autocomplete="off"
+            style="font-family:var(--font-mono);font-size:1.1rem;letter-spacing:2px;text-align:center;"
+            oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <button class="btn btn-primary w-full" style="justify-content:center;" onclick="checkVoter()">
+          VERIFY & UNLOCK BALLOT →
+        </button>
+        <div id="spinner" style="display:none;text-align:center;margin-top:12px;">
+          <span class="text-dim text-mono" style="font-size:0.8rem;">Verifying...</span>
+        </div>
+      </div>
+
+      <!-- Confirmed card -->
+      <div class="card" id="confirmed-card" style="display:none;border-color:rgba(0,230,118,.35);background:rgba(0,230,118,.03);">
+        <div style="text-align:center;padding:12px 0;">
+          <div style="font-size:2rem;margin-bottom:10px;">✅</div>
+          <div style="font-family:var(--font-head);font-size:1.15rem;letter-spacing:2px;color:var(--green);">BALLOT UNLOCKED</div>
+          <div id="confirmed-prn" class="text-mono mt-1" style="color:var(--accent);font-size:0.9rem;"></div>
+          <p class="text-dim mt-2" style="font-size:0.84rem;">The ballot is now live on the voting terminal.<br>Student can select their candidate and vote.</p>
+        </div>
+        <div class="divider"></div>
+        <button class="btn btn-ghost w-full" style="justify-content:center;" onclick="resetToNext()">
+          ↩ Next Voter
+        </button>
+      </div>
+
+      <!-- How it works -->
+      <div class="card" style="background:rgba(0,200,255,.02);">
+        <div class="card-title">How It Works</div>
+        <ol style="color:var(--text-dim);font-size:0.84rem;line-height:2.3;padding-left:18px;">
+          <li>Student presents their college ID card</li>
+          <li>Enter their PRN and click Verify</li>
+          <li>Ballot appears automatically on the voting terminal</li>
+          <li>Student selects their candidate and submits</li>
+          <li>Terminal resets — come back here for the next student</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let lastActive = {{ 'true' if state.is_active else 'false' }};
+
+    async function pollStatus() {
+      try {
+        const r = await fetch('/api/status');
+        const d = await r.json();
+        document.getElementById('live-voted').textContent = d.voted_count;
+        document.getElementById('live-total').textContent = d.voter_count;
+        document.getElementById('election-label').textContent = d.election_name;
+        const nowActive = d.is_active;
+        if (nowActive !== lastActive) {
+          document.getElementById('inactive-panel').style.display = nowActive ? 'none' : 'block';
+          document.getElementById('active-panel').style.display = nowActive ? 'block' : 'none';
+          const badge = document.getElementById('nav-status');
+          badge.className = nowActive ? 'badge badge-active' : 'badge badge-inactive';
+          badge.innerHTML = nowActive ? '<span class="live-dot"></span>LIVE' : '◌ INACTIVE';
+          lastActive = nowActive;
+          if (nowActive) resetToNext();
+        }
+      } catch(e) {}
+    }
+    pollStatus();
+    setInterval(pollStatus, 4000);
+
+    async function checkVoter() {
+      const prn = document.getElementById('prn-input').value.trim();
+      if (!prn) { showMsg('Please enter a PRN.', true); return; }
+      document.getElementById('spinner').style.display = 'block';
+      document.getElementById('msg-box').style.display = 'none';
+      const fd = new FormData();
+      fd.append('prn', prn);
+      try {
+        const res = await fetch('/college-admin/unlock-voter', { method:'POST', body:fd });
+        const data = await res.json();
+        document.getElementById('spinner').style.display = 'none';
+        if (data.success) {
+          document.getElementById('confirmed-prn').textContent = 'PRN: ' + prn;
+          document.getElementById('prn-card').style.display = 'none';
+          document.getElementById('confirmed-card').style.display = 'block';
+        } else {
+          showMsg('✗ ' + data.message, true);
+          document.getElementById('prn-input').value = '';
+          document.getElementById('prn-input').focus();
+        }
+      } catch(e) {
+        document.getElementById('spinner').style.display = 'none';
+        showMsg('Network error. Try again.', true);
+      }
+    }
+
+    function resetToNext() {
+      document.getElementById('confirmed-card').style.display = 'none';
+      document.getElementById('prn-card').style.display = 'block';
+      document.getElementById('prn-input').value = '';
+      document.getElementById('msg-box').style.display = 'none';
+      document.getElementById('prn-input').focus();
+    }
+
+    function showMsg(text, isErr) {
+      const b = document.getElementById('msg-box');
+      b.textContent = text;
+      b.className = 'flash-msg' + (isErr ? ' error' : '');
+      b.style.display = 'block';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('prn-input')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') checkVoter();
+      });
+    });
+  </script>
+</body>
+</html>

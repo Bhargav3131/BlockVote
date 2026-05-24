@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlockVote — Blockchain Voting System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="home-wrap">
+    <div style="font-size:3rem;margin-bottom:16px;">⛓️</div>
+    <h1 class="home-title">BLOCK<span>VOTE</span></h1>
+    <p class="home-subtitle">Blockchain-Based Campus Voting System · Tilak Maharashtra Vidyapeeth University</p>
+
+    <div class="home-cards">
+      <a href="{{ url_for('main_admin_login') }}" class="home-card">
+        <div class="home-card-icon">🔐</div>
+        <div class="home-card-title">Main Admin</div>
+        <div class="home-card-desc">Manage elections, candidates & results</div>
+      </a>
+      <a href="{{ url_for('college_admin_login') }}" class="home-card">
+        <div class="home-card-icon">🏫</div>
+        <div class="home-card-title">College Admin</div>
+        <div class="home-card-desc">Verify voters & unlock voting terminal</div>
+      </a>
+    </div>
+
+    <div class="home-footer">
+      Secured with SHA-256 · Each vote is an immutable blockchain block
+    </div>
+  </div>
+</body>
+</html>

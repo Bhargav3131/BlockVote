@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Results — BlockVote</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="{{ url_for('main_admin_dashboard') }}" class="navbar-brand"><span class="chain-icon">⛓️</span> BLOCKVOTE</a>
+    <div class="navbar-links">
+      <a href="{{ url_for('main_admin_dashboard') }}" class="nav-link">Dashboard</a>
+      <a href="{{ url_for('manage_voters') }}" class="nav-link">Voters</a>
+      <a href="{{ url_for('main_admin_results') }}" class="nav-link" style="color:var(--accent)">Results</a>
+      <a href="{{ url_for('main_admin_blockchain') }}" class="nav-link">Blockchain</a>
+      <a href="{{ url_for('main_admin_logout') }}" class="nav-link danger">Logout</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <div class="flex-between">
+        <div>
+          <h1>ELECTION RESULTS</h1>
+          <p>Student Council President · Total votes cast: {{ total }}</p>
+        </div>
+        {% if state.is_declared %}
+          <span class="badge badge-declared">★ OFFICIALLY DECLARED</span>
+        {% elif state.is_active %}
+          <span class="badge badge-active">● ELECTION IN PROGRESS</span>
+        {% else %}
+          <div class="flex-gap">
+            <span class="badge badge-inactive">◌ Stopped</span>
+            {% if total > 0 %}
+              <form method="POST" action="{{ url_for('declare_results') }}">
+                <button type="submit" class="btn btn-gold btn-sm">★ Declare Results</button>
+              </form>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}{% for msg in messages %}<div class="flash-msg">{{ msg }}</div>{% endfor %}{% endif %}
+    {% endwith %}
+
+    <div class="card">
+      <div class="card-title">Vote Tally</div>
+
+      {% if state.is_active %}
+        <!-- During election: only show total, no breakdown -->
+        <div style="text-align:center;padding:40px 24px;">
+          <div style="font-size:3rem;font-family:var(--font-head);font-weight:700;color:var(--accent)">{{ total }}</div>
+          <div class="text-dim" style="font-size:0.85rem;margin-top:6px;letter-spacing:1px;">TOTAL VOTES CAST SO FAR</div>
+          <div class="text-dim mt-2" style="font-size:0.78rem;">Per-candidate breakdown will be visible after the election is stopped and results are declared.</div>
+        </div>
+      {% elif candidates %}
+        {% for c in candidates %}
+          {% set pct = ((c.vote_count / total * 100) | round(1)) if total > 0 else 0 %}
+          <div class="result-row">
+            <div class="result-top">
+              <div>
+                <span class="result-name">{{ c.name }}</span>
+                {% if loop.first and state.is_declared and total > 0 %}
+                  <span class="winner-badge">★ WINNER</span>
+                {% endif %}
+              </div>
+              <span class="result-votes">{{ c.vote_count }} votes · {{ pct }}%</span>
+            </div>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar" style="width:{{ pct }}%"></div>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-dim text-center" style="padding:24px;font-size:0.88rem;">No votes recorded yet.</p>
+      {% endif %}
+    </div>
+
+    {% if state.is_declared and total > 0 %}
+      <div class="card" style="text-align:center;border-color:rgba(255,215,0,0.3);background:rgba(255,215,0,0.04);">
+        <div style="font-size:2.5rem;margin-bottom:12px;">🏆</div>
+        <div style="font-family:var(--font-head);font-size:1.5rem;letter-spacing:3px;color:var(--gold);">
+          {{ candidates[0].name }}
+        </div>
+        <div style="color:var(--text-dim);font-size:0.85rem;margin-top:6px;">
+          Elected as Student Council President with {{ candidates[0].vote_count }} votes
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>

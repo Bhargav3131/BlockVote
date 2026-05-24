@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Blockchain Ledger — BlockVote</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="{{ url_for('main_admin_dashboard') }}" class="navbar-brand">⛓️ BLOCKVOTE</a>
+    <div class="navbar-links">
+      <a href="{{ url_for('main_admin_dashboard') }}" class="nav-link">Dashboard</a>
+      <a href="{{ url_for('manage_voters') }}" class="nav-link">Voters</a>
+      <a href="{{ url_for('main_admin_results') }}" class="nav-link">Results</a>
+      <a href="{{ url_for('main_admin_blockchain') }}" class="nav-link active">Blockchain</a>
+      <a href="{{ url_for('main_admin_logout') }}" class="nav-link danger">Logout</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <div class="flex-between">
+        <div>
+          <h1>BLOCKCHAIN LEDGER</h1>
+          <p>Immutable vote records · SHA-256 cryptographic hashing · Candidate identity is hidden</p>
+        </div>
+        <button class="btn btn-ghost" onclick="verifyChain()" id="verify-btn">🔍 Verify Integrity</button>
+      </div>
+    </div>
+
+    <div id="verify-result" style="display:none;" class="card"></div>
+
+    <div class="card">
+      <div class="flex-between mb-2">
+        <div class="card-title" style="margin-bottom:0;">Vote Blocks</div>
+        <span class="text-mono text-dim" style="font-size:0.78rem;">{{ blocks|length }} total blocks</span>
+      </div>
+
+      <div class="block-chain">
+        {% for b in blocks %}
+          {% if not loop.first %}<div class="block-connector"></div>{% endif %}
+          <div class="block-item {% if b.block_index == 0 %}genesis{% endif %}">
+            <div class="block-header">
+              <span class="block-num">{% if b.block_index == 0 %}⚡ GENESIS BLOCK{% else %}BLOCK #{{ b.block_index }}{% endif %}</span>
+              <span class="text-dim text-mono" style="font-size:0.7rem;">
+                {% if b.block_index == 0 %}Chain Origin{% else %}[VOTE RECORDED]{% endif %}
+              </span>
+            </div>
+            <div class="block-field"><span>Hash:</span><span style="color:var(--accent);font-size:0.71rem;">{{ b.hash }}</span></div>
+            <div class="block-field"><span>Prev Hash:</span><span style="font-size:0.71rem;">{{ b.previous_hash[:48] }}...</span></div>
+            {% if b.block_index > 0 %}
+            <div class="block-field"><span>Voter PRN Hash:</span><span style="font-size:0.71rem;">{{ b.voter_prn_hash[:48] }}...</span></div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card" style="background:rgba(0,200,255,.02);">
+      <div class="card-title">Privacy Notice</div>
+      <p style="color:var(--text-dim);font-size:0.84rem;line-height:1.8;">
+        Each block stores only the <strong style="color:#fff;">SHA-256 hash of the voter's PRN</strong> — the original PRN cannot be recovered from the hash. The candidate a voter chose is encoded only in the internal hash and is not displayed here, ensuring vote privacy while maintaining tamper-proof integrity.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    async function verifyChain() {
+      const btn = document.getElementById('verify-btn');
+      const box = document.getElementById('verify-result');
+      btn.disabled = true; btn.textContent = 'Verifying...';
+      try {
+        const r = await fetch('/main-admin/verify-blockchain');
+        const d = await r.json();
+        box.style.display = 'block';
+        if (d.is_valid) {
+          box.style.cssText = 'display:block;margin-bottom:18px;padding:14px 18px;border-radius:8px;border:1px solid rgba(0,230,118,.4);background:rgba(0,230,118,.05);';
+          box.innerHTML = `<div style="display:flex;align-items:center;gap:12px;"><span style="font-size:1.4rem;">✅</span><div><div style="font-family:var(--font-head);color:var(--green);letter-spacing:1px;">BLOCKCHAIN INTEGRITY VERIFIED</div><div class="text-dim" style="font-size:0.81rem;margin-top:3px;">${d.message} — ${d.block_count} blocks checked at ${new Date().toLocaleTimeString()}</div></div></div>`;
+        } else {
+          box.style.cssText = 'display:block;margin-bottom:18px;padding:14px 18px;border-radius:8px;border:1px solid rgba(255,59,92,.4);background:rgba(255,59,92,.05);';
+          box.innerHTML = `<div style="display:flex;align-items:center;gap:12px;"><span style="font-size:1.4rem;">⚠️</span><div><div style="font-family:var(--font-head);color:var(--red);letter-spacing:1px;">TAMPER DETECTED</div><div class="text-dim" style="font-size:0.81rem;margin-top:3px;">${d.message}</div></div></div>`;
+        }
+      } catch(e) {}
+      btn.disabled = false; btn.textContent = '🔍 Verify Integrity';
+    }
+  </script>
+</body>
+</html>

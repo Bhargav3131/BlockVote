@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voter Whitelist — BlockVote</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="{{ url_for('main_admin_dashboard') }}" class="navbar-brand">
+      <span class="chain-icon">⛓️</span> BLOCKVOTE
+    </a>
+    <div class="navbar-links">
+      <a href="{{ url_for('main_admin_dashboard') }}" class="nav-link">Dashboard</a>
+      <a href="{{ url_for('manage_voters') }}" class="nav-link" style="color:var(--accent)">Voters</a>
+      <a href="{{ url_for('main_admin_results') }}" class="nav-link">Results</a>
+      <a href="{{ url_for('main_admin_blockchain') }}" class="nav-link">Blockchain</a>
+      <a href="{{ url_for('main_admin_logout') }}" class="nav-link danger">Logout</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <div class="flex-between">
+        <div>
+          <h1>VOTER WHITELIST</h1>
+          <p>Only registered PRNs can cast a vote. Add all eligible students here before starting the election.</p>
+        </div>
+        <span class="badge {% if state.is_active %}badge-active{% else %}badge-inactive{% endif %}">
+          {{ voters|length }} Registered
+        </span>
+      </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}{% for msg in messages %}<div class="flash-msg">{{ msg }}</div>{% endfor %}{% endif %}
+    {% endwith %}
+
+    <!-- Add PRNs -->
+    <div class="card">
+      <div class="card-title">Add Eligible Voters</div>
+      {% if state.is_active %}
+        <p class="text-dim" style="font-size:0.85rem;">⚠ Cannot modify voter list while election is active.</p>
+      {% else %}
+        <form method="POST" action="{{ url_for('add_voter') }}">
+          <div class="form-group">
+            <label class="form-label">PRN Numbers</label>
+            <textarea name="prns" class="form-control" rows="5"
+              style="font-family:var(--font-mono);font-size:0.9rem;resize:vertical;"
+              placeholder="Enter one PRN per line, or comma-separated&#10;e.g.&#10;04423000726&#10;04423000835&#10;04423000901"></textarea>
+            <div class="text-dim mt-1" style="font-size:0.78rem;">You can paste multiple PRNs at once — one per line or comma-separated.</div>
+          </div>
+          <button type="submit" class="btn btn-primary">+ Add Voters</button>
+        </form>
+      {% endif %}
+    </div>
+
+    <!-- Voter List -->
+    <div class="card">
+      <div class="flex-between mb-2">
+        <div class="card-title" style="margin-bottom:0;">Registered Voters</div>
+        <div class="flex-gap">
+          <span class="text-mono text-dim" style="font-size:0.8rem;">
+            {{ voters|selectattr('has_voted', 'equalto', 1)|list|length }} voted / {{ voters|length }} total
+          </span>
+        </div>
+      </div>
+
+      {% if voters %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>PRN</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in voters %}
+              <tr>
+                <td class="text-mono text-dim">{{ loop.index }}</td>
+                <td class="text-mono" style="letter-spacing:1px;">{{ v.prn }}</td>
+                <td>
+                  {% if v.has_voted %}
+                    <span class="badge badge-active" style="font-size:0.7rem;">✓ Voted</span>
+                  {% else %}
+                    <span class="badge badge-inactive" style="font-size:0.7rem;">Pending</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if not state.is_active and not v.has_voted %}
+                    <form method="POST" action="{{ url_for('delete_voter', vid=v.id) }}" style="display:inline;">
+                      <button type="submit" class="btn btn-danger btn-sm"
+                        onclick="return confirm('Remove PRN {{ v.prn }} from whitelist?')">Remove</button>
+                    </form>
+                  {% else %}
+                    <span class="text-dim" style="font-size:0.78rem;">Locked</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-dim text-center" style="padding:28px;font-size:0.88rem;">
+          No voters registered yet. Add PRNs above before starting the election.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

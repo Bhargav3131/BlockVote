@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Admin Dashboard — BlockVote</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="{{ url_for('main_admin_dashboard') }}" class="navbar-brand">⛓️ BLOCKVOTE</a>
+    <div class="navbar-links">
+      <a href="{{ url_for('main_admin_dashboard') }}" class="nav-link active">Dashboard</a>
+      <a href="{{ url_for('manage_voters') }}" class="nav-link">Voters</a>
+      <a href="{{ url_for('main_admin_results') }}" class="nav-link">Results</a>
+      <a href="{{ url_for('main_admin_blockchain') }}" class="nav-link">Blockchain</a>
+      <a href="{{ url_for('main_admin_logout') }}" class="nav-link danger">Logout</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <div class="flex-between">
+        <div>
+          <h1>ADMIN DASHBOARD</h1>
+          <p id="election-name-label">{{ state.election_name }}</p>
+        </div>
+        <span id="status-badge" class="badge {% if state.is_active %}badge-active{% elif state.is_declared %}badge-declared{% else %}badge-inactive{% endif %}">
+          {% if state.is_active %}<span class="live-dot"></span>LIVE{% elif state.is_declared %}★ DECLARED{% else %}◌ INACTIVE{% endif %}
+        </span>
+      </div>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}{% for m in messages %}<div class="flash-msg">{{ m }}</div>{% endfor %}{% endif %}
+    {% endwith %}
+
+    <!-- Live Stats -->
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-val">{{ candidates|length }}</div><div class="stat-label">Candidates</div></div>
+      <div class="stat-card"><div class="stat-val">{{ voter_count }}</div><div class="stat-label">Registered Voters</div></div>
+      <div class="stat-card"><div class="stat-val" id="live-voted" style="color:var(--accent)">{{ voted_count }}</div><div class="stat-label">Votes Cast</div></div>
+      <div class="stat-card">
+        <div class="stat-val" id="live-status" style="color:{% if state.is_active %}var(--green){% else %}var(--red){% endif %}">
+          {% if state.is_active %}ON{% else %}OFF{% endif %}
+        </div>
+        <div class="stat-label">Status</div>
+      </div>
+    </div>
+
+    <!-- Terminal PIN — shown when election is active -->
+    {% if state.is_active and state.terminal_pin %}
+    <div class="card" style="border-color:rgba(0,200,255,.4);background:rgba(0,200,255,.03);">
+      <div class="card-title" style="color:var(--accent);">🔐 Voting Terminal PIN</div>
+      <p class="text-dim" style="font-size:0.84rem;margin-bottom:14px;">
+        Enter this PIN once on the <strong style="color:#fff;">/vote</strong> screen to activate the voting terminal. The terminal stays active for the entire election — no need to re-enter.
+      </p>
+      <div style="font-family:var(--font-mono);font-size:2.8rem;letter-spacing:14px;color:var(--accent);text-align:center;padding:18px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);">
+        {{ state.terminal_pin }}
+      </div>
+      <p class="text-dim mt-1" style="font-size:0.75rem;text-align:center;">Share this with the person managing the voting terminal · Do not share with students</p>
+    </div>
+    {% endif %}
+
+    <!-- Election Controls -->
+    <div class="card">
+      <div class="card-title">Election Controls</div>
+      <div class="flex-gap mb-2">
+        {% if not state.is_active and not state.is_declared %}
+          <button class="btn btn-success" onclick="document.getElementById('start-modal').classList.add('open')">▶ Start Election</button>
+        {% elif state.is_active %}
+          <form method="POST" action="{{ url_for('stop_election') }}">
+            <button type="submit" class="btn btn-danger">■ Stop Election</button>
+          </form>
+        {% endif %}
+
+        {% if not state.is_active and not state.is_declared %}
+          <form method="POST" action="{{ url_for('declare_results') }}">
+            <button type="submit" class="btn btn-gold" {% if voted_count == 0 %}disabled{% endif %}>★ Declare Results</button>
+          </form>
+        {% endif %}
+
+        <a href="{{ url_for('main_admin_results') }}" class="btn btn-ghost">📊 Results</a>
+        <a href="{{ url_for('main_admin_blockchain') }}" class="btn btn-ghost">🔗 Blockchain</a>
+        <button class="btn btn-ghost" onclick="verifyChain()" id="verify-btn">🔍 Verify Chain</button>
+      </div>
+
+      <!-- Reset buttons -->
+      <div class="divider"></div>
+      <div class="flex-gap">
+        <span class="text-dim" style="font-size:0.78rem;letter-spacing:.5px;">RESET OPTIONS:</span>
+        <button class="btn btn-danger btn-sm" onclick="document.getElementById('reset-votes-modal').classList.add('open')">🔄 Reset Votes Only</button>
+        <button class="btn btn-danger btn-sm" onclick="document.getElementById('reset-full-modal').classList.add('open')">💥 Full System Reset</button>
+      </div>
+
+      <div id="verify-result" style="display:none;margin-top:14px;padding:11px 15px;border-radius:5px;font-size:0.86rem;"></div>
+    </div>
+
+    <!-- Add Candidate -->
+    <div class="card">
+      <div class="card-title">Candidates</div>
+      {% if state.is_active %}
+        <p class="text-dim mb-2" style="font-size:0.84rem;">⚠ Cannot modify candidates while election is active.</p>
+      {% else %}
+        <form method="POST" action="{{ url_for('add_candidate') }}" style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:flex-end;margin-bottom:20px;">
+          <div>
+            <label class="form-label">Full Name</label>
+            <input type="text" name="name" class="form-control" placeholder="e.g. Bhargav Kalbhor" required>
+          </div>
+          <div>
+            <label class="form-label">Tagline / Slogan</label>
+            <input type="text" name="tagline" class="form-control" placeholder="e.g. Progress for All">
+          </div>
+          <button type="submit" class="btn btn-primary" style="align-self:flex-end;">+ Add</button>
+        </form>
+      {% endif %}
+
+      {% if candidates %}
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Name</th><th>Tagline</th><th>Action</th></tr></thead>
+            <tbody>
+              {% for c in candidates %}
+              <tr>
+                <td class="text-mono text-dim">{{ loop.index }}</td>
+                <td style="font-weight:500;">{{ c.name }}</td>
+                <td class="text-dim" style="font-size:0.82rem;">{{ c.tagline or '—' }}</td>
+                <td>
+                  {% if not state.is_active %}
+                    <form method="POST" action="{{ url_for('delete_candidate', cid=c.id) }}" style="display:inline;">
+                      <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Remove {{ c.name }}?')">Remove</button>
+                    </form>
+                  {% else %}<span class="text-dim" style="font-size:0.78rem;">Locked</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-dim text-center" style="padding:18px;font-size:0.86rem;">No candidates yet. Add at least 2 to start.</p>
+      {% endif %}
+    </div>
+
+    <!-- Network -->
+    <div class="card" style="background:rgba(0,200,255,.02);">
+      <div class="card-title">Remote Access</div>
+      <p class="text-dim" style="font-size:0.84rem;line-height:1.9;">
+        Any device on the same network can access this system at:<br>
+        <span class="text-mono" style="color:var(--accent)">http://&lt;this-machine-IP&gt;:5000</span><br>
+        Find your IP → Windows: <code style="color:var(--accent)">ipconfig</code> &nbsp;|&nbsp; Mac/Linux: <code style="color:var(--accent)">ifconfig</code>
+      </p>
+    </div>
+  </div>
+
+  <!-- Start Election Modal -->
+  <div class="modal-overlay" id="start-modal">
+    <div class="modal-box">
+      <h3>▶ START ELECTION</h3>
+      <p>Give this election a name. It will appear on the voting terminal for students.</p>
+      <form method="POST" action="{{ url_for('start_election') }}">
+        <div class="form-group">
+          <label class="form-label">Election Name</label>
+          <input type="text" name="election_name" class="form-control" placeholder="e.g. BCA 2025-26 Student Council Election" required autofocus>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-success">▶ Start Now</button>
+          <button type="button" class="btn btn-ghost" onclick="document.getElementById('start-modal').classList.remove('open')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Reset Votes Modal -->
+  <div class="modal-overlay" id="reset-votes-modal">
+    <div class="modal-box">
+      <h3>🔄 RESET VOTES</h3>
+      <p>This clears all votes and resets the blockchain. <strong style="color:#fff;">Candidates and voter list are kept.</strong> This cannot be undone.</p>
+      <div class="modal-actions">
+        <form method="POST" action="{{ url_for('reset_votes') }}">
+          <button type="submit" class="btn btn-danger">Reset Votes</button>
+        </form>
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('reset-votes-modal').classList.remove('open')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Reset Modal -->
+  <div class="modal-overlay" id="reset-full-modal">
+    <div class="modal-box">
+      <h3>💥 FULL SYSTEM RESET</h3>
+      <p>This deletes <strong style="color:var(--red);">everything</strong> — all votes, all candidates, all registered voters, and the blockchain. The system will be completely blank. This cannot be undone.</p>
+      <div class="modal-actions">
+        <form method="POST" action="{{ url_for('reset_full') }}">
+          <button type="submit" class="btn btn-danger">Yes, Delete Everything</button>
+        </form>
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('reset-full-modal').classList.remove('open')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Live polling every 4 seconds
+    async function pollStatus() {
+      try {
+        const r = await fetch('/api/status');
+        const d = await r.json();
+        const votedEl = document.getElementById('live-voted');
+        const statusEl = document.getElementById('live-status');
+        if (votedEl) votedEl.textContent = d.voted_count;
+        if (statusEl) {
+          statusEl.textContent = d.is_active ? 'ON' : 'OFF';
+          statusEl.style.color = d.is_active ? 'var(--green)' : 'var(--red)';
+        }
+      } catch(e) {}
+    }
+    setInterval(pollStatus, 4000);
+
+    async function verifyChain() {
+      const btn = document.getElementById('verify-btn');
+      const box = document.getElementById('verify-result');
+      btn.disabled = true; btn.textContent = 'Verifying...';
+      try {
+        const r = await fetch('/main-admin/verify-blockchain');
+        const d = await r.json();
+        box.style.display = 'block';
+        if (d.is_valid) {
+          box.style.cssText = 'display:block;margin-top:14px;padding:11px 15px;border-radius:5px;font-size:0.86rem;background:rgba(0,230,118,.07);border-left:3px solid var(--green);color:var(--text)';
+          box.innerHTML = `✅ <strong style="color:var(--green)">Blockchain intact</strong> — ${d.message} (${d.block_count} blocks, verified at ${new Date().toLocaleTimeString()})`;
+        } else {
+          box.style.cssText = 'display:block;margin-top:14px;padding:11px 15px;border-radius:5px;font-size:0.86rem;background:rgba(255,59,92,.07);border-left:3px solid var(--red);color:var(--text)';
+          box.innerHTML = `⚠️ <strong style="color:var(--red)">TAMPER DETECTED</strong> — ${d.message}`;
+        }
+      } catch(e) { box.style.display='block'; box.textContent='Verification failed.'; }
+      btn.disabled = false; btn.textContent = '🔍 Verify Chain';
+    }
+
+    // Close modal on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(el => {
+      el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Voting Terminal — BlockVote</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    body { background:#040810; }
+    .terminal-wrap { max-width:680px; margin:0 auto; padding:0 20px 60px; }
+    .terminal-header { text-align:center; padding:36px 20px 20px; }
+    .terminal-header h1 { font-family:var(--font-head); font-size:clamp(1.4rem,4vw,2rem); letter-spacing:3px; color:#fff; }
+    .terminal-header p { color:var(--text-dim); margin-top:5px; font-size:0.85rem; }
+
+    /* PIN entry */
+    .pin-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:40px 32px; text-align:center; }
+    .pin-card h2 { font-family:var(--font-head); font-size:1.3rem; letter-spacing:2px; color:#fff; margin-bottom:8px; }
+    .pin-card p { color:var(--text-dim); font-size:0.84rem; margin-bottom:28px; line-height:1.7; }
+    .pin-input {
+      width:100%; max-width:220px; padding:16px 12px;
+      background:var(--surface2); border:2px solid var(--border);
+      border-radius:8px; color:#fff; font-family:var(--font-mono);
+      font-size:2.2rem; letter-spacing:10px; text-align:center;
+      outline:none; transition:border-color .2s; display:block; margin:0 auto 16px;
+    }
+    .pin-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,200,255,.1); }
+    .pin-error { color:var(--red); font-size:0.82rem; margin-bottom:14px; min-height:20px; }
+
+    /* Waiting */
+    .waiting-screen { text-align:center; padding:64px 20px; }
+    .pulse { animation:pulse 2s infinite; display:inline-block; font-size:3rem; margin-bottom:16px; }
+    @keyframes pulse { 0%,100%{opacity:.4;transform:scale(.95)} 50%{opacity:1;transform:scale(1.05)} }
+
+    /* Ballot */
+    .vote-btn { display:block; width:100%; padding:17px 24px; background:linear-gradient(135deg,var(--accent2),#0099ff); border:none; border-radius:8px; color:#fff; font-family:var(--font-head); font-size:1.2rem; letter-spacing:3px; cursor:pointer; margin-top:22px; transition:all .2s; }
+    .vote-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 8px 30px rgba(0,100,255,.4); }
+    .vote-btn:disabled { opacity:.4; cursor:not-allowed; }
+    .vote-note { text-align:center; color:var(--text-dim); font-size:0.76rem; margin-top:10px; }
+  </style>
+</head>
+<body>
+
+  <!-- ① PIN ACTIVATION (one-time, when page first opens) -->
+  <div id="screen-pin">
+    <div class="terminal-header">
+      <div style="font-size:2rem;margin-bottom:10px;">🔐</div>
+      <h1>VOTING TERMINAL</h1>
+      <p>BlockVote — Campus Election System</p>
+    </div>
+    <div class="terminal-wrap">
+      <div class="pin-card">
+        <h2>ACTIVATE TERMINAL</h2>
+        <p>Enter the 6-digit Terminal PIN provided by the Main Admin to activate this voting kiosk. This is required only once.</p>
+        <input type="password" id="pin-input" class="pin-input"
+          maxlength="6" placeholder="——" autocomplete="off" inputmode="numeric">
+        <div class="pin-error" id="pin-error"></div>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="activateTerminal()">
+          ACTIVATE →
+        </button>
+        <p style="margin-top:16px;color:var(--text-dim);font-size:0.74rem;letter-spacing:1px;">
+          Contact Main Admin if you don't have the PIN
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② WAITING (terminal active, waiting for admin to unlock a voter) -->
+  <div id="screen-waiting" style="display:none;">
+    <div class="waiting-screen">
+      <div class="pulse">🗳️</div>
+      <h2 style="font-family:var(--font-head);font-size:1.6rem;letter-spacing:3px;color:#fff;margin-bottom:10px;">TERMINAL READY</h2>
+      <p id="waiting-election-name" style="color:var(--accent);font-family:var(--font-head);font-size:1rem;letter-spacing:2px;margin-bottom:16px;"></p>
+      <p style="color:var(--text-dim);font-size:0.85rem;max-width:340px;margin:0 auto;line-height:1.8;">
+        Waiting for College Admin to verify a student's PRN.<br>
+        The ballot will appear here automatically.
+      </p>
+      <div style="margin-top:32px;font-family:var(--font-mono);font-size:0.72rem;color:rgba(90,138,181,.4);letter-spacing:2px;">
+        POLLING FOR VOTER...
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ BALLOT (student votes) -->
+  <div id="screen-ballot" style="display:none;">
+    <div class="terminal-header">
+      <div style="font-size:2rem;margin-bottom:10px;">🗳️</div>
+      <h1>CAST YOUR VOTE</h1>
+      <p id="ballot-election-name" style="color:var(--accent);font-family:var(--font-head);font-size:0.9rem;letter-spacing:2px;"></p>
+    </div>
+    <div class="terminal-wrap">
+      <div class="card">
+        <div class="card-title" style="text-align:center;margin-bottom:18px;">Select Your Candidate</div>
+        <div class="candidates-grid">
+          {% for c in candidates %}
+          <div class="candidate-card" onclick="selectCandidate({{ c.id }}, this)">
+            <div class="candidate-avatar">{{ c.name[0] }}</div>
+            <div class="candidate-name">{{ c.name }}</div>
+            {% if c.tagline %}<div class="candidate-tagline">{{ c.tagline }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <button class="vote-btn" id="vote-btn" onclick="submitVote()" disabled>SUBMIT VOTE →</button>
+        <p class="vote-note">Your vote is anonymous and permanently recorded on the blockchain.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ SUCCESS -->
+  <div id="screen-success" style="display:none;">
+    <div class="success-screen">
+      <div class="success-icon">✅</div>
+      <h2>VOTE RECORDED</h2>
+      <p style="color:var(--text-dim);margin-top:8px;">Your vote is permanently sealed on the blockchain.</p>
+      <div style="margin-top:28px;font-family:var(--font-mono);font-size:0.78rem;color:var(--text-dim);">
+        Returning to terminal in <span id="countdown">5</span>s...
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤ ELECTION ENDED (shown if election stops while terminal is active) -->
+  <div id="screen-ended" style="display:none;">
+    <div class="waiting-screen">
+      <div style="font-size:3rem;margin-bottom:16px;">🏁</div>
+      <h2 style="font-family:var(--font-head);font-size:1.5rem;letter-spacing:3px;color:var(--gold);margin-bottom:10px;">ELECTION CLOSED</h2>
+      <p style="color:var(--text-dim);font-size:0.85rem;">Voting has ended. Results will be declared by the Main Admin.</p>
+    </div>
+  </div>
+
+  <script>
+    let selectedId = null;
+    let pollInterval = null;
+    let electionName = '{{ election_name }}';
+
+    function showScreen(name) {
+      ['pin','waiting','ballot','success','ended'].forEach(s =>
+        document.getElementById('screen-' + s).style.display = 'none'
+      );
+      document.getElementById('screen-' + name).style.display = 'block';
+    }
+
+    // ── TERMINAL ACTIVATION (one-time PIN) ──
+    async function activateTerminal() {
+      const pin = document.getElementById('pin-input').value.trim();
+      const err = document.getElementById('pin-error');
+      err.textContent = '';
+      if (pin.length !== 6) { err.textContent = 'PIN must be 6 digits.'; return; }
+
+      const fd = new FormData();
+      fd.append('pin', pin);
+      try {
+        const r = await fetch('/vote/activate', { method:'POST', body:fd });
+        const d = await r.json();
+        if (d.success) {
+          electionName = d.election_name;
+          document.getElementById('waiting-election-name').textContent = electionName;
+          document.getElementById('ballot-election-name').textContent = electionName;
+          showScreen('waiting');
+          startPolling();
+        } else {
+          err.textContent = d.message;
+          document.getElementById('pin-input').value = '';
+          document.getElementById('pin-input').focus();
+        }
+      } catch(e) {
+        err.textContent = 'Network error. Try again.';
+      }
+    }
+
+    // ── POLL for voter unlock (after terminal is activated) ──
+    function startPolling() {
+      clearInterval(pollInterval);
+      pollInterval = setInterval(async () => {
+        try {
+          const r = await fetch('/api/terminal-status');
+          const d = await r.json();
+          if (!d.terminal_active) return; // shouldn't happen
+          if (!d.election_active) {
+            clearInterval(pollInterval);
+            showScreen('ended');
+            return;
+          }
+          if (d.voter_ready) {
+            clearInterval(pollInterval);
+            // Reset candidate selection before showing ballot
+            selectedId = null;
+            document.querySelectorAll('.candidate-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById('vote-btn').disabled = true;
+            document.getElementById('ballot-election-name').textContent = d.election_name || electionName;
+            showScreen('ballot');
+          }
+        } catch(e) {}
+      }, 2000);
+    }
+
+    // ── CANDIDATE SELECTION ──
+    function selectCandidate(id, el) {
+      document.querySelectorAll('.candidate-card').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+      selectedId = id;
+      document.getElementById('vote-btn').disabled = false;
+    }
+
+    // ── VOTE SUBMIT ──
+    async function submitVote() {
+      if (!selectedId) return;
+      const btn = document.getElementById('vote-btn');
+      btn.disabled = true;
+      btn.textContent = 'RECORDING ON BLOCKCHAIN...';
+      const fd = new FormData();
+      fd.append('candidate_id', selectedId);
+      try {
+        const r = await fetch('/vote/submit', { method:'POST', body:fd });
+        const d = await r.json();
+        if (d.success) {
+          showScreen('success');
+          let t = 5;
+          const cd = document.getElementById('countdown');
+          const iv = setInterval(() => {
+            t--; cd.textContent = t;
+            if (t <= 0) {
+              clearInterval(iv);
+              btn.textContent = 'SUBMIT VOTE →';
+              showScreen('waiting');
+              startPolling(); // resume polling for next voter
+            }
+          }, 1000);
+        } else {
+          alert(d.message);
+          btn.disabled = false;
+          btn.textContent = 'SUBMIT VOTE →';
+        }
+      } catch(e) {
+        alert('Network error. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'SUBMIT VOTE →';
+      }
+    }
+
+    // PIN input: digits only, Enter to submit
+    document.getElementById('pin-input').addEventListener('input', e => {
+      e.target.value = e.target.value.replace(/\D/g,'');
+    });
+    document.getElementById('pin-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') activateTerminal();
+    });
+
+    // If terminal was already activated (page refresh), skip PIN screen
+    {% if terminal_active and is_active %}
+      document.getElementById('waiting-election-name').textContent = electionName;
+      document.getElementById('ballot-election-name').textContent = electionName;
+      showScreen('waiting');
+      startPolling();
+    {% elif not is_active and terminal_active %}
+      showScreen('ended');
+    {% endif %}
+  </script>
+</body>
+</html>
